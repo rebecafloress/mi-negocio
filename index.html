@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0F5C5C">
+<title>Mi negocio · Registro</title>
+<style>
+  :root {
+    --bg: #EDF1F3; --card: #FFFFFF; --ink: #16222B; --muted: #5E6C77; --line: #CBD5DB;
+    --brand: #0F5C5C; --brand-ink: #FFFFFF;
+    --egreso: #B3412F; --ingreso: #1F7A4D; --prestamo: #A8730A;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #11181D; --card: #1A242B; --ink: #E7EEF2; --muted: #93A4AF; --line: #33434D;
+      --brand: #4FB3B3; --brand-ink: #0B1519; --egreso: #E27A68; --ingreso: #5CC38C; --prestamo: #E0AE45; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 17px/1.4 "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; }
+  main { max-width: 520px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { font-size: 1.5rem; margin: 8px 0 18px; letter-spacing: -.01em; }
+  form { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: grid; gap: 16px; }
+  label, .lbl { display: grid; gap: 6px; font-weight: 600; font-size: .92rem; color: var(--muted); }
+  input { width: 100%; font: inherit; color: var(--ink); background: var(--bg); border: 1.5px solid var(--line);
+    border-radius: 10px; padding: 12px; min-height: 48px; }
+  input:focus-visible, button:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
+  input[readonly] { background: transparent; border-style: dashed; font-weight: 700; color: var(--ink); }
+  .tipos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .tipos input { position: absolute; opacity: 0; pointer-events: none; }
+  .tipos label { margin: 0; }
+  .tipos span { display: grid; place-items: center; min-height: 48px; border: 1.5px solid var(--line); border-radius: 10px;
+    font-weight: 700; color: var(--ink); cursor: pointer; text-align: center; }
+  .tipos input:checked + span { color: #fff; border-color: transparent; }
+  #t-Egreso:checked + span { background: var(--egreso); }
+  #t-Ingreso:checked + span { background: var(--ingreso); }
+  #t-Préstamo:checked + span { background: var(--prestamo); }
+  .tipos input:focus-visible + span { outline: 3px solid var(--brand); outline-offset: 2px; }
+  .hint { font-weight: 400; font-size: .82rem; }
+  button { font: inherit; font-weight: 700; min-height: 52px; border: 0; border-radius: 12px;
+    background: var(--brand); color: var(--brand-ink); cursor: pointer; }
+  button:disabled { opacity: .55; }
+  #msg { min-height: 1.4em; font-weight: 600; text-align: center; margin: 0; }
+  #msg.ok { color: var(--ingreso); } #msg.err { color: var(--egreso); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Registrar movimiento</h1>
+  <form id="f" autocomplete="off">
+    <label>Fecha
+      <input type="date" id="fecha" required>
+    </label>
+
+    <label>Proyecto
+      <input id="proyecto" list="dl-proy" placeholder="Elige o escribe uno nuevo" required>
+      <datalist id="dl-proy"></datalist>
+    </label>
+
+    <div class="lbl">Tipo
+      <div class="tipos">
+        <label><input type="radio" name="tipo" id="t-Egreso" value="Egreso" checked><span>Egreso</span></label>
+        <label><input type="radio" name="tipo" id="t-Ingreso" value="Ingreso"><span>Ingreso</span></label>
+        <label><input type="radio" name="tipo" id="t-Préstamo" value="Préstamo"><span>Préstamo</span></label>
+      </div>
+    </div>
+
+    <label>Descripción
+      <input id="desc" list="dl-desc" placeholder="Elige o escribe una nueva" required>
+      <datalist id="dl-desc"></datalist>
+    </label>
+
+    <label id="w-monto">Costo (Q)
+      <input id="monto" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
+    </label>
+
+    <div id="w-corte" hidden style="display:grid;gap:16px">
+      <label>Tiempo (minutos)
+        <input id="min" type="number" inputmode="numeric" min="0" step="1" placeholder="0">
+      </label>
+      <label>Costo (Q1.50 por minuto)
+        <input id="costo" readonly value="Q 0.00">
+      </label>
+    </div>
+
+    <button id="btn" type="submit">Guardar</button>
+    <p id="msg" role="status"></p>
+  </form>
+</main>
+
+<script>
+// 1) https://script.google.com/macros/s/AKfycbwj_gSeYxyD7jX9ptXJtvM9ZZBADXUN6RsUSfLKn0itpHN2D9CSIL09fQNFG3U3Fq9U/exec
+const URL_SCRIPT = 'https://script.google.com/macros/s/AKfycbwj_gSeYxyD7jX9ptXJtvM9ZZBADXUN6RsUSfLKn0itpHN2D9CSIL09fQNFG3U3Fq9U/exec';
+const TARIFA = 1.5;
+
+const $ = id => document.getElementById(id);
+const hoy = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+const esCorte = () => $('desc').value.trim().toLowerCase() === 'corte';
+
+function llenar(dl, items) { $(dl).replaceChildren(...items.map(v => Object.assign(document.createElement('option'), { value: v }))); }
+function cargarListas(d) { llenar('dl-proy', d.proyectos); llenar('dl-desc', d.descripciones);
+  try { localStorage.setItem('listas', JSON.stringify(d)); } catch (e) {} }
+function mensaje(t, cls) { $('msg').textContent = t; $('msg').className = cls || ''; }
+
+function actualizar() {
+  const corte = esCorte();
+  $('w-monto').hidden = corte; $('w-corte').hidden = !corte;
+  $('monto').required = !corte; $('min').required = corte;
+  $('costo').value = 'Q ' + ((Number($('min').value) || 0) * TARIFA).toFixed(2);
+}
+$('desc').addEventListener('input', actualizar);
+$('min').addEventListener('input', actualizar);
+
+$('fecha').value = hoy();
+try { cargarListas(JSON.parse(localStorage.getItem('listas'))); } catch (e) {}
+fetch(URL_SCRIPT).then(r => r.json()).then(cargarListas).catch(() => {});
+actualizar();
+
+$('f').addEventListener('submit', async e => {
+  e.preventDefault();
+  const monto = esCorte() ? Number($('min').value) * TARIFA : Number($('monto').value);
+  if (!(monto > 0)) return mensaje('Ingresa un monto mayor a 0.', 'err');
+  const datos = {
+    fecha: $('fecha').value,
+    proyecto: $('proyecto').value.trim(),
+    tipo: document.querySelector('input[name=tipo]:checked').value,
+    concepto: esCorte() ? 'Corte' : $('desc').value.trim(),
+    monto: Math.round(monto * 100) / 100
+  };
+  $('btn').disabled = true; mensaje('Guardando…');
+  try {
+    const r = await fetch(URL_SCRIPT, { method: 'POST', body: JSON.stringify(datos) });
+    const res = await r.json();
+    if (!res.ok) throw new Error(res.error);
+    cargarListas(res);
+    mensaje('Guardado ✓', 'ok');
+    $('desc').value = ''; $('monto').value = ''; $('min').value = ''; actualizar();
+  } catch (err) {
+    mensaje('No se pudo guardar. Revisa tu conexión e intenta de nuevo.', 'err');
+  } finally { $('btn').disabled = false; }
+});
+</script>
+</body>
+</html>
